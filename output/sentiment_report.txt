@@ -1,0 +1,17 @@
+============================================================
+SENTIMENT ANALYSIS REPORT
+Topic: Whole Milk Consumption School Policy
+============================================================
+
+Total documents analyzed: 494
+
+Sentiment distribution:
+  Positive: 162 (32.8%)
+  Negative: 122 (24.7%)
+  Neutral:  210 (42.5%)
+
+Mean sentiment score (0=neg, 1=pos): 0.512
+
+Conclusion: Overall sentiment is mixed or neutral across the collected content.
+
+Outputs: keyword network (keyword_network.png), keywords table (keywords.csv).

@@ -1,0 +1,14 @@
+# Kaggle dataset (too large for GitHub; download manually or use download_kaggle.py)
+training.1600000.processed.noemoticon.csv
+data/kaggle_sentiment140/
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Optional: ignore scraped data if you want repo to stay small (uncomment if needed)
+# data/scraped_raw.csv
+# data/scraped_clean.csv
