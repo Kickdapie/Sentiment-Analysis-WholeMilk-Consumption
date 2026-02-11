@@ -65,49 +65,162 @@ def scrape_news_rss(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
 
 
 def scrape_reddit(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
-    """Scrape Reddit via public search JSON (no auth required for limited use)."""
+    """Scrape Reddit via public search JSON with pagination (no auth required for limited use)."""
     queries = queries or config.SEARCH_QUERIES
     rows = []
     base = "https://www.reddit.com/search.json"
     headers = {"User-Agent": "SentimentAnalysisBot/1.0 (SchoolMilkPolicy)"}
     for q in tqdm(queries, desc="Reddit"):
-        try:
-            r = requests.get(
-                base,
-                params={"q": q, "limit": min(25, max_per_query), "type": "link"},
-                headers=headers,
-                timeout=10,
-            )
-            r.raise_for_status()
-            data = r.json()
-            for child in data.get("data", {}).get("children", [])[:max_per_query]:
-                post = child.get("data", {})
-                title = clean_text(post.get("title", ""))
-                selftext = clean_text(post.get("selftext", ""))
-                text = f"{title}. {selftext}".strip().rstrip(".")
-                if len(text) < 15:
-                    continue
-                rows.append({
-                    "source": "reddit",
-                    "query": q,
-                    "text": text,
-                    "title": title,
-                    "url": f"https://reddit.com{post.get('permalink', '')}",
-                    "published": datetime.utcfromtimestamp(post.get("created_utc", 0)).isoformat(),
-                })
-        except Exception as e:
-            tqdm.write(f"Reddit error for '{q}': {e}")
-        time.sleep(1)
+        collected = 0
+        after = None
+        while collected < max_per_query:
+            try:
+                params = {"q": q, "limit": 100, "type": "link"}
+                if after:
+                    params["after"] = after
+                r = requests.get(base, params=params, headers=headers, timeout=10)
+                r.raise_for_status()
+                data = r.json()
+                children = data.get("data", {}).get("children", [])
+                if not children:
+                    break
+                for child in children:
+                    if collected >= max_per_query:
+                        break
+                    post = child.get("data", {})
+                    title = clean_text(post.get("title", ""))
+                    selftext = clean_text(post.get("selftext", ""))
+                    text = f"{title}. {selftext}".strip().rstrip(".")
+                    if len(text) < 15:
+                        continue
+                    rows.append({
+                        "source": "reddit",
+                        "query": q,
+                        "text": text,
+                        "title": title,
+                        "url": f"https://reddit.com{post.get('permalink', '')}",
+                        "published": datetime.utcfromtimestamp(post.get("created_utc", 0)).isoformat(),
+                    })
+                    collected += 1
+                after = data.get("data", {}).get("after")
+                if not after:
+                    break
+                time.sleep(1)
+            except Exception as e:
+                tqdm.write(f"Reddit error for '{q}': {e}")
+                break
+        time.sleep(0.5)
+    return rows
+
+
+def scrape_twitter_api(queries=None, max_per_query=30):
+    """Scrape Twitter/X using official API (free tier). Requires TWITTER_BEARER_TOKEN in environment."""
+    token = getattr(config, "TWITTER_BEARER_TOKEN", "") or os.environ.get("TWITTER_BEARER_TOKEN", "").strip()
+    if not token:
+        return None  # no credentials, caller will try other methods
+    try:
+        import tweepy
+    except ImportError:
+        tqdm.write("Twitter API: pip install tweepy")
+        return None
+    queries = queries or config.SEARCH_QUERIES
+    rows = []
+    try:
+        client = tweepy.Client(bearer_token=token)
+        for q in tqdm(queries[:7], desc="Twitter (API)"):
+            try:
+                resp = client.search_recent_tweets(
+                    query=q,
+                    max_results=min(100, max_per_query * 2),
+                    tweet_fields=["created_at", "text"],
+                    expansions=["author_id"],
+                    user_fields=["username"],
+                )
+                if resp.data:
+                    for t in resp.data:
+                        text = clean_text(getattr(t, "text", "") or "")
+                        if len(text) < 10:
+                            continue
+                        rows.append({
+                            "source": "twitter",
+                            "query": q,
+                            "text": text,
+                            "title": "",
+                            "url": f"https://twitter.com/i/status/{t.id}" if getattr(t, "id", None) else "",
+                            "published": t.created_at.isoformat() if getattr(t, "created_at", None) else "",
+                        })
+                        if len(rows) >= max_per_query * len(queries[:7]):
+                            break
+            except Exception as e:
+                tqdm.write(f"Twitter API search error for '{q}': {e}")
+            time.sleep(1)
+        if rows:
+            tqdm.write(f"Twitter: got {len(rows)} tweets via API.")
+        return rows if rows else None
+    except Exception as e:
+        tqdm.write(f"Twitter API error: {e}")
+        return None
+
+
+def scrape_twitter_nitter_rss(queries=None, max_per_query=30):
+    """Fallback: try to get Twitter search results via Nitter RSS (works on Python 3.12+)."""
+    queries = queries or config.SEARCH_QUERIES
+    rows = []
+    base_urls = [
+        "https://nitter.poast.org/search/rss",
+        "https://nitter.privacydev.net/search/rss",
+    ]
+    for q in tqdm(queries[:5], desc="Twitter (Nitter RSS)"):
+        for base in base_urls:
+            try:
+                url = f"{base}?f=tweets&q={quote_plus(q)}"
+                feed = feedparser.parse(
+                    url,
+                    request_headers={"User-Agent": "Mozilla/5.0 (compatible; SentimentBot/1.0)"},
+                )
+                for i, entry in enumerate(feed.entries):
+                    if i >= max_per_query:
+                        break
+                    title = clean_text(entry.get("title", ""))
+                    summary = clean_text(entry.get("summary", ""))
+                    text = f"{title}. {summary}".strip().rstrip(".") or title
+                    if len(text) < 15:
+                        continue
+                    rows.append({
+                        "source": "twitter",
+                        "query": q,
+                        "text": text,
+                        "title": title,
+                        "url": entry.get("link", ""),
+                        "published": entry.get("published", ""),
+                    })
+                if rows:
+                    time.sleep(0.5)
+                    break
+            except Exception:
+                continue
+            time.sleep(0.5)
     return rows
 
 
 def scrape_twitter_snscrape(queries=None, max_per_query=50):
-    """Optional: scrape Twitter/X using snscrape (may have rate limits)."""
+    """Scrape Twitter/X: try API (if Bearer token set), then snscrape, then Nitter RSS."""
+    # 1) Twitter Developer API (free tier) – works on any Python
+    if getattr(config, "TWITTER_BEARER_TOKEN", "") or os.environ.get("TWITTER_BEARER_TOKEN", "").strip():
+        rows = scrape_twitter_api(queries=queries, max_per_query=max_per_query)
+        if rows:
+            return rows
+    # 2) snscrape (needs Python 3.11 or earlier)
     try:
         import snscrape.modules.twitter as sntwitter
-    except ImportError:
-        tqdm.write("snscrape not installed. Skip Twitter or: pip install snscrape")
-        return []
+    except (ImportError, AttributeError):
+        tqdm.write("Twitter: snscrape not available (Python 3.12+). Trying Nitter RSS fallback...")
+        rows = scrape_twitter_nitter_rss(queries=queries, max_per_query=max_per_query)
+        if rows:
+            tqdm.write(f"Twitter: got {len(rows)} items via Nitter RSS.")
+        else:
+            tqdm.write("Twitter: no data. Set TWITTER_BEARER_TOKEN for API, or use Python 3.11 (see TWITTER_SETUP.md).")
+        return rows
     queries = queries or config.SEARCH_QUERIES
     rows = []
     for q in tqdm(queries, desc="Twitter"):
@@ -135,7 +248,7 @@ def scrape_twitter_snscrape(queries=None, max_per_query=50):
 
 def run_scraper(sources=None):
     """Run enabled scrapers and save to config.SCRAPED_RAW_PATH."""
-    sources = sources or [config.SCRAPE_SOURCE]
+    sources = sources or getattr(config, "SCRAPE_SOURCES", [config.SCRAPE_SOURCE])
     if "twitter" in sources:
         sources = [s for s in sources if s != "twitter"] + ["twitter"]
     all_rows = []
@@ -162,4 +275,4 @@ def run_scraper(sources=None):
 
 
 if __name__ == "__main__":
-    run_scraper(sources=["news_rss", "reddit"])
+    run_scraper(sources=getattr(config, "SCRAPE_SOURCES", ["news_rss", "reddit"]))

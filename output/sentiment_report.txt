@@ -1,17 +1,23 @@
 ============================================================
 SENTIMENT ANALYSIS REPORT
 Topic: Whole Milk Consumption School Policy
+Model: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest)
 ============================================================
 
-Total documents analyzed: 494
+Total documents analyzed: 3344
 
-Sentiment distribution:
-  Positive: 162 (32.8%)
-  Negative: 122 (24.7%)
-  Neutral:  210 (42.5%)
+Overall sentiment distribution:
+  Positive: 456 (13.6%)
+  Negative: 1013 (30.3%)
+  Neutral:  1875 (56.1%)
 
-Mean sentiment score (0=neg, 1=pos): 0.512
+Mean sentiment score (0=neg, 1=pos): 0.185
+
+Sentiment by source:
+  News (RSS): 601 items — Positive 45 (7.5%), Negative 47 (7.8%), Neutral 509 (84.7%)
+  Reddit: 2743 items — Positive 411 (15.0%), Negative 966 (35.2%), Neutral 1366 (49.8%)
+  Twitter: no data (scraper unavailable on this Python version or not in scrape sources).
 
 Conclusion: Overall sentiment is mixed or neutral across the collected content.
 
-Outputs: keyword network (keyword_network.png), keywords table (keywords.csv).
+Outputs: sentiment_summary.png, sentiment_by_source.png, keyword_network.png, keywords.csv.

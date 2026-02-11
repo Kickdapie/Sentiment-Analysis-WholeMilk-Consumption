@@ -14,10 +14,49 @@ from sklearn.metrics import classification_report, accuracy_score
 import joblib
 
 import config
+from preprocess import clean_for_nlp
 
 
 # Sentiment140 columns: target, id, date, flag, user, text
 S140_COLUMNS = ["target", "id", "date", "flag", "user", "text"]
+
+
+def load_alternative_dataset(path=None, text_col=None, label_col=None):
+    """Load alternative Kaggle CSV (e.g. saurabhshahane Twitter Sentiment). Must have text + label columns."""
+    path = path or config.KAGGLE_ALT_PATH
+    text_col = text_col or config.KAGGLE_ALT_TEXT_COL
+    label_col = label_col or config.KAGGLE_ALT_LABEL_COL
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"Alternative dataset not found at {path}. "
+            "Place Twitter_Data.csv in the data/ folder, then run again."
+        )
+    df = pd.read_csv(path, encoding="utf-8", on_bad_lines="skip")
+    # Auto-detect text column (saurabhshahane and others often use "tweet" or "text")
+    if text_col not in df.columns:
+        text_col = "tweet" if "tweet" in df.columns else ("text" if "text" in df.columns else text_col)
+    if label_col not in df.columns:
+        label_col = "label" if "label" in df.columns else ("sentiment" if "sentiment" in df.columns else label_col)
+    if text_col not in df.columns or label_col not in df.columns:
+        raise ValueError(
+            f"CSV must have a text column and a label column. Found: {list(df.columns)}"
+        )
+    df = df[[text_col, label_col]].dropna()
+    # Map labels to 0/1 (negative/positive); handle numeric -1/0/1 (e.g. 1.0, -1.0) and strings
+    raw_num = pd.to_numeric(df[label_col], errors="coerce")
+    is_num = raw_num.notna()
+    df["label"] = np.nan
+    df.loc[is_num, "label"] = np.where(raw_num[is_num] == 1, 1, np.where(raw_num[is_num] == -1, 0, np.nan))
+    # Non-numeric: "negative"/"positive", "0"/"4", etc.
+    if (~is_num).any():
+        raw_str = df.loc[~is_num, label_col].astype(str).str.lower().str.strip()
+        neg_vals = {"0", "-1", "negative", "neg"}
+        pos_vals = {"1", "4", "positive", "pos"}
+        df.loc[~is_num, "label"] = np.where(raw_str.isin(pos_vals), 1, np.where(raw_str.isin(neg_vals), 0, np.nan))
+    df = df.dropna(subset=["label"])
+    df["label"] = df["label"].astype(int)
+    df = df.rename(columns={text_col: "text"})
+    return df[["text", "label"]]
 
 
 def load_kaggle_sentiment140(path=None):
@@ -78,21 +117,28 @@ def train_and_save(
 ):
     """Train TF-IDF + Logistic Regression and save model and vectorizer."""
     import re
-    data_path = data_path or config.KAGGLE_RAW_PATH
     save_model_path = save_model_path or config.SENTIMENT_MODEL_PATH
     save_vectorizer_path = save_vectorizer_path or config.VECTORIZER_PATH
-    filter_keywords = filter_keywords or [
-        "milk", "school", "lunch", "whole milk", "nutrition", "kid", "child",
-        "policy", "diet", "healthy", "food", "drink",
-    ]
-    df = load_kaggle_sentiment140(data_path)
-    texts, labels = prepare_training_data(
-        df, subsample=subsample, filter_keywords=filter_keywords
-    )
-    # If filtered set is too small, train on general subsample
-    if len(texts) < 2000:
+    use_alt = getattr(config, "KAGGLE_DATASET", "sentiment140") == "alternative"
+    if use_alt:
+        df = load_alternative_dataset()
+        if subsample and len(df) > subsample:
+            df = df.sample(n=subsample, random_state=42)
+        texts = [clean_for_nlp(t) for t in df["text"].tolist()]
+        labels = df["label"].values
+    else:
+        data_path = data_path or config.KAGGLE_RAW_PATH
+        filter_keywords = filter_keywords or [
+            "milk", "school", "lunch", "whole milk", "nutrition", "kid", "child",
+            "policy", "diet", "healthy", "food", "drink",
+        ]
         df = load_kaggle_sentiment140(data_path)
-        texts, labels = prepare_training_data(df, subsample=subsample, filter_keywords=None)
+        texts, labels = prepare_training_data(
+            df, subsample=subsample, filter_keywords=filter_keywords
+        )
+        if len(texts) < 2000:
+            df = load_kaggle_sentiment140(data_path)
+            texts, labels = prepare_training_data(df, subsample=subsample, filter_keywords=None)
     X_train, X_test, y_train, y_test = train_test_split(
         texts, labels, test_size=0.2, random_state=42, stratify=labels
     )
