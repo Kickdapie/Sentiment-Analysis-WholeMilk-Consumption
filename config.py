@@ -46,7 +46,12 @@ SCRAPED_RAW_PATH = os.path.join(DATA_DIR, "scraped_raw.csv")
 SCRAPED_CLEAN_PATH = os.path.join(DATA_DIR, "scraped_clean.csv")
 MAX_ITEMS_PER_QUERY = 300  # per-query cap; target ~2500+ total (News + Reddit)
 SCRAPE_SOURCE = "reddit"   # fallback when SCRAPE_SOURCES not used
-SCRAPE_SOURCES = ["news_rss", "reddit", "twitter"]  # twitter: set TWITTER_BEARER_TOKEN for API, else snscrape/Nitter
+SCRAPE_SOURCES = ["news_rss", "reddit", "bluesky"]  # bluesky: public API, no auth needed; twitter: set TWITTER_BEARER_TOKEN
+# Bluesky (free): set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD in .env for authenticated access
+# Create app password at: https://bsky.app/settings/app-passwords
+BLUESKY_HANDLE = os.environ.get("BLUESKY_HANDLE", "").strip()
+BLUESKY_APP_PASSWORD = os.environ.get("BLUESKY_APP_PASSWORD", "").strip()
+
 # Twitter Developer (free tier): set env var TWITTER_BEARER_TOKEN to use official API (no snscrape needed)
 TWITTER_BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN", "").strip()
 

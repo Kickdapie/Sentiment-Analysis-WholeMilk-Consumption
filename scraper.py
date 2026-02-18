@@ -1,6 +1,6 @@
 """
 Scraper for "Whole milk consumption school policy" content.
-Gathers text from News RSS and Reddit (optional Twitter via snscrape) for sentiment analysis.
+Gathers text from News RSS, Reddit, Bluesky, and optional Twitter for sentiment analysis.
 Methodology inspired by PeerJ CS 1149 (vegan tweets).
 """
 
@@ -111,6 +111,149 @@ def scrape_reddit(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
                 break
         time.sleep(0.5)
     return rows
+
+
+def _bluesky_post_to_row(post, query):
+    """Convert a Bluesky post (dict or atproto model) to a row dict."""
+    # Handle atproto SDK response objects
+    if hasattr(post, "record"):
+        record = post.record
+        text = clean_text(getattr(record, "text", "") or "")
+        author = getattr(post, "author", None)
+        handle = getattr(author, "handle", "") if author else ""
+        uri = getattr(post, "uri", "") or ""
+        created_at = getattr(record, "created_at", "") or ""
+    else:
+        # Raw dict from public API
+        record = post.get("record", {})
+        text = clean_text(record.get("text", ""))
+        author = post.get("author", {})
+        handle = author.get("handle", "")
+        uri = post.get("uri", "")
+        created_at = record.get("createdAt", "")
+    if len(text) < 15:
+        return None
+    post_url = ""
+    if uri and handle:
+        parts = uri.split("/")
+        if len(parts) >= 5:
+            rkey = parts[-1]
+            post_url = f"https://bsky.app/profile/{handle}/post/{rkey}"
+    return {
+        "source": "bluesky",
+        "query": query,
+        "text": text,
+        "title": "",
+        "url": post_url,
+        "published": created_at,
+    }
+
+
+def _scrape_bluesky_sdk(queries, max_per_query):
+    """Scrape Bluesky using the atproto SDK with authentication."""
+    bsky_handle = getattr(config, "BLUESKY_HANDLE", "") or os.environ.get("BLUESKY_HANDLE", "").strip()
+    bsky_password = getattr(config, "BLUESKY_APP_PASSWORD", "") or os.environ.get("BLUESKY_APP_PASSWORD", "").strip()
+    if not bsky_handle or not bsky_password:
+        return None
+    try:
+        from atproto import Client
+    except ImportError:
+        tqdm.write("Bluesky SDK: pip install atproto")
+        return None
+    rows = []
+    try:
+        client = Client()
+        client.login(bsky_handle, bsky_password)
+        tqdm.write(f"Bluesky: logged in as {bsky_handle}")
+    except Exception as e:
+        tqdm.write(f"Bluesky login failed: {e}")
+        return None
+    for q in tqdm(queries, desc="Bluesky (SDK)"):
+        collected = 0
+        cursor = None
+        while collected < max_per_query:
+            try:
+                resp = client.app.bsky.feed.search_posts(
+                    params={"q": q, "limit": 100, "cursor": cursor} if cursor
+                    else {"q": q, "limit": 100}
+                )
+                posts = getattr(resp, "posts", []) or []
+                if not posts:
+                    break
+                for post in posts:
+                    if collected >= max_per_query:
+                        break
+                    row = _bluesky_post_to_row(post, q)
+                    if row:
+                        rows.append(row)
+                        collected += 1
+                cursor = getattr(resp, "cursor", None)
+                if not cursor:
+                    break
+                time.sleep(0.3)
+            except Exception as e:
+                tqdm.write(f"Bluesky SDK error for '{q}': {e}")
+                break
+        time.sleep(0.2)
+    return rows if rows else None
+
+
+def _scrape_bluesky_public(queries, max_per_query):
+    """Scrape Bluesky via the public API (no auth required)."""
+    rows = []
+    base = "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+    headers = {
+        "User-Agent": "SentimentAnalysisBot/1.0 (SchoolMilkPolicy)",
+        "Accept": "application/json",
+    }
+    for q in tqdm(queries, desc="Bluesky"):
+        collected = 0
+        cursor = None
+        while collected < max_per_query:
+            try:
+                params = {"q": q, "limit": 100}
+                if cursor:
+                    params["cursor"] = cursor
+                r = requests.get(base, params=params, headers=headers, timeout=15)
+                r.raise_for_status()
+                data = r.json()
+                posts = data.get("posts", [])
+                if not posts:
+                    break
+                for post in posts:
+                    if collected >= max_per_query:
+                        break
+                    row = _bluesky_post_to_row(post, q)
+                    if row:
+                        rows.append(row)
+                        collected += 1
+                cursor = data.get("cursor")
+                if not cursor:
+                    break
+                time.sleep(0.5)
+            except Exception as e:
+                tqdm.write(f"Bluesky public API error for '{q}': {e}")
+                break
+        time.sleep(0.3)
+    return rows if rows else None
+
+
+def scrape_bluesky(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
+    """Scrape Bluesky posts. Tries authenticated SDK first, then public API."""
+    queries = queries or config.SEARCH_QUERIES
+    # 1) Try authenticated SDK (more reliable)
+    rows = _scrape_bluesky_sdk(queries, max_per_query)
+    if rows:
+        tqdm.write(f"Bluesky: got {len(rows)} posts via SDK.")
+        return rows
+    # 2) Fall back to public API (no auth)
+    tqdm.write("Bluesky: trying public API (no auth)...")
+    rows = _scrape_bluesky_public(queries, max_per_query)
+    if rows:
+        tqdm.write(f"Bluesky: got {len(rows)} posts via public API.")
+        return rows
+    tqdm.write("Bluesky: no data. Set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD in .env for authenticated access.")
+    return []
 
 
 def scrape_twitter_api(queries=None, max_per_query=30):
@@ -256,6 +399,8 @@ def run_scraper(sources=None):
         all_rows.extend(scrape_news_rss())
     if "reddit" in sources:
         all_rows.extend(scrape_reddit())
+    if "bluesky" in sources:
+        all_rows.extend(scrape_bluesky())
     if "twitter" in sources:
         all_rows.extend(scrape_twitter_snscrape(max_per_query=30))
     if not all_rows:

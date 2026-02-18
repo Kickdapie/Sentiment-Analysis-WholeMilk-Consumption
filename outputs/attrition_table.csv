@@ -1,0 +1,5 @@
+stage,count,retention_pct_from_raw
+Raw extraction,4867,100.0
+Deduplication,4867,100.0
+Length filter (>=15 chars),4867,100.0
+Final analytic dataset,4867,100.0

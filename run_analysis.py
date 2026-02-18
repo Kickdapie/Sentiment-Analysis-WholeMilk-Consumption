@@ -132,10 +132,8 @@ def run_pipeline(
                 s_pos = (sub["sentiment_label"] == "positive").sum()
                 s_neg = (sub["sentiment_label"] == "negative").sum()
                 s_neu = (sub["sentiment_label"] == "neutral").sum()
-                src_name = "Twitter" if src == "twitter" else ("News (RSS)" if src == "news_rss" else "Reddit")
+                src_name = {"twitter": "Twitter", "news_rss": "News (RSS)", "reddit": "Reddit", "bluesky": "Bluesky"}.get(src, src)
                 f.write(f"  {src_name}: {s_total} items — Positive {s_pos} ({100*s_pos/s_total:.1f}%), Negative {s_neg} ({100*s_neg/s_total:.1f}%), Neutral {s_neu} ({100*s_neu/s_total:.1f}%)\n")
-            if not any(s == "twitter" for s, _ in by_source):
-                f.write("  Twitter: no data (scraper unavailable on this Python version or not in scrape sources).\n")
             f.write("\n")
         f.write("Conclusion: ")
         if pct_pos > pct_neg and pct_pos > pct_neu:
@@ -162,7 +160,7 @@ def run_pipeline(
         source_names = []
         pos_counts, neg_counts, neu_counts = [], [], []
         for src, sub in by_source:
-            src_name = "Twitter" if src == "twitter" else ("News (RSS)" if src == "news_rss" else "Reddit")
+            src_name = {"twitter": "Twitter", "news_rss": "News (RSS)", "reddit": "Reddit", "bluesky": "Bluesky"}.get(src, src)
             source_names.append(src_name)
             pos_counts.append((sub["sentiment_label"] == "positive").sum())
             neg_counts.append((sub["sentiment_label"] == "negative").sum())
