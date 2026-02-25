@@ -1,0 +1,11 @@
+rank,negative_driver,negative_log_odds,positive_driver,positive_log_odds
+1,policy,-1.239,healthy,0.82
+2,usda,-0.942,nutrition,0.646
+3,parents,-0.938,chocolate,0.54
+4,children,-0.802,dairy,0.418
+5,food,-0.402,whole,0.19
+6,fat,-0.358,cafeteria,0.115
+7,student,-0.243,schools,0.084
+8,kids,-0.097,students,0.076
+9,health,-0.026,lunch,0.075
+10,school,-0.006,milk,0.064

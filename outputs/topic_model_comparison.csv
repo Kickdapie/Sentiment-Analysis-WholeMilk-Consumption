@@ -1,0 +1,3 @@
+model,topics,c_v,uniqueness,interpretation_quality,notes
+LDA,8,0.5013,0.762,Moderate,Broad-to-moderate thematic groupings
+NMF (TF-IDF),8,0.5358,0.8,Strong,Alternative baseline; often sharper lexical boundaries
