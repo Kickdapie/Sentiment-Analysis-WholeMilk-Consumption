@@ -1,0 +1,2 @@
+test_used,u_stat,p_value,cohen_d_after_minus_before,mean_diff_after_minus_before,ci95_mean_diff_low,ci95_mean_diff_high,before_mean,after_mean,before_n,after_n,entities_removed_count,rows_removed_count,rows_removed_pct
+Mann-Whitney U,823022.0,0.00881251235932339,-0.11466096387887258,-0.03270692137704373,-0.0566588968384166,-0.009622240565221561,0.2267298724348001,0.19402295105775638,2251,686,102,1930,39.7

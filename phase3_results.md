@@ -128,3 +128,10 @@ Ranked using smoothed log-odds (positive vs negative corpora, informative prior)
 | 10 | school (-0.006) | milk (0.064) |
 
 These terms act as explanatory mechanisms by quantifying which words are disproportionately associated with negative versus positive sentiment.
+
+## 3.4 Hypothesis Testing, Bias, and Sensitivity
+
+- Test used: **Mann-Whitney U**; u_stat=1876372.5000, p=0.900737
+- Cohen's d: **-0.056**; 95% CI mean diff: **[-0.0331, 0.0033]**
+- Sensitivity (exclude top 5% active entities): p=0.008813, d=-0.115
+- Bias checks reported in `outputs/bias_diagnostics.csv`.

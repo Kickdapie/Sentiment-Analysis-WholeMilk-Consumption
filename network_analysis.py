@@ -181,29 +181,69 @@ def plot_network(G, word_freq, sentiment_scores=None, output_path=None):
 def plot_community_network(G, word_freq, partition, output_path=None):
     """Draw keyword network colored by Louvain community."""
     output_path = output_path or os.path.join(config.OUTPUT_DIR, "keyword_community_network.png")
-    plt.figure(figsize=(14, 11))
-    pos = nx.spring_layout(G, k=1.5, iterations=50, seed=42)
-    node_sizes = [word_freq.get(n, 5) * 15 for n in G.nodes()]
-    # Color by community
-    colors = [COMMUNITY_COLORS[partition.get(n, 0) % len(COMMUNITY_COLORS)] for n in G.nodes()]
-    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=colors, alpha=0.85)
-    nx.draw_networkx_edges(G, pos, alpha=0.2, width=0.5)
-    nx.draw_networkx_labels(G, pos, font_size=8, font_weight="bold")
-    # Build legend
+    plt.figure(figsize=(16, 12))
+
+    # --- Build separated layout by community (far clearer than one global spring layout)
     community_ids = sorted(set(partition.values()))
+    n_com = max(len(community_ids), 1)
+    radius = 8.0 + 1.4 * n_com
+    centers = {}
+    for i, cid in enumerate(community_ids):
+        theta = (2.0 * np.pi * i) / n_com
+        centers[cid] = np.array([radius * np.cos(theta), radius * np.sin(theta)])
+
+    pos = {}
+    for cid in community_ids:
+        members = [n for n, c in partition.items() if c == cid]
+        sub = G.subgraph(members)
+        local_k = max(0.25, 1.8 / np.sqrt(max(len(members), 1)))
+        local_pos = nx.spring_layout(sub, seed=42 + cid, k=local_k, iterations=120, weight="weight")
+        spread = 1.0 + 0.08 * len(members)
+        center = centers[cid]
+        for n, xy in local_pos.items():
+            pos[n] = center + spread * np.array(xy)
+
+    node_sizes = [max(120, min(2400, word_freq.get(n, 5) * 11)) for n in G.nodes()]
+    colors = [COMMUNITY_COLORS[partition.get(n, 0) % len(COMMUNITY_COLORS)] for n in G.nodes()]
+
+    # Draw inter-community edges lighter, intra-community slightly darker
+    intra_edges, inter_edges = [], []
+    for u, v in G.edges():
+        if partition.get(u) == partition.get(v):
+            intra_edges.append((u, v))
+        else:
+            inter_edges.append((u, v))
+    nx.draw_networkx_edges(G, pos, edgelist=inter_edges, alpha=0.05, width=0.4, edge_color="#95a5a6")
+    nx.draw_networkx_edges(G, pos, edgelist=intra_edges, alpha=0.18, width=0.8, edge_color="#7f8c8d")
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=colors, alpha=0.9, linewidths=0.4, edgecolors="#ffffff")
+
+    # Label only the most important nodes to avoid unreadable clutter
+    label_nodes = set()
+    # Top 4 per community
+    for cid in community_ids:
+        members = [n for n, c in partition.items() if c == cid]
+        top_members = sorted(members, key=lambda w: word_freq.get(w, 0), reverse=True)[:4]
+        label_nodes.update(top_members)
+    # Plus top 15 overall
+    top_overall = sorted(G.nodes(), key=lambda w: word_freq.get(w, 0), reverse=True)[:15]
+    label_nodes.update(top_overall)
+    labels = {n: n for n in label_nodes}
+    nx.draw_networkx_labels(G, pos, labels=labels, font_size=9, font_weight="bold")
+
     legend_handles = []
     for cid in community_ids:
         color = COMMUNITY_COLORS[cid % len(COMMUNITY_COLORS)]
         members = [n for n, c in partition.items() if c == cid]
-        top_words = sorted(members, key=lambda w: word_freq.get(w, 0), reverse=True)[:4]
+        top_words = sorted(members, key=lambda w: word_freq.get(w, 0), reverse=True)[:3]
         label = f"Community {cid + 1}: {', '.join(top_words)}"
-        legend_handles.append(plt.Line2D([0], [0], marker='o', color='w',
-                                         markerfacecolor=color, markersize=10, label=label))
-    plt.legend(handles=legend_handles, loc="lower left", fontsize=7, framealpha=0.9)
-    plt.title("Keyword co-occurrence network — Louvain communities")
+        legend_handles.append(
+            plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=color, markersize=10, label=label)
+        )
+    plt.legend(handles=legend_handles, loc="upper left", fontsize=8, framealpha=0.95)
+    plt.title("Keyword co-occurrence network — Louvain communities (separated layout)")
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close()
     print(f"Saved community network plot to {output_path}")
 

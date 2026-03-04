@@ -1,0 +1,8 @@
+bias_dimension,metric,value
+Platform/source imbalance,reddit,56.2%
+Platform/source imbalance,bluesky,31.3%
+Platform/source imbalance,news_rss,12.5%
+High-activity concentration (proxy),Top-10 entities share,20.6%
+Time-window bias,Posts within ±30 days of announcement,26.1%
+Geographic proxy (domain TLD),TLD .com,68.7%
+Geographic proxy (domain TLD),TLD .app,31.3%
