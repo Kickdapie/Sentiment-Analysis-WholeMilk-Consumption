@@ -63,22 +63,29 @@ def main():
         )
         .sort_values("month")
     )
+    monthly["month_period"] = pd.PeriodIndex(monthly["month"], freq="M")
+    monthly["year"] = monthly["month_period"].dt.year
     monthly["avg_sentiment_score"] = monthly["avg_sentiment_score"].round(4)
 
     out_csv = os.path.join(OUT_DIR, "monthly_timeline.csv")
     monthly.to_csv(out_csv, index=False)
 
-    x = range(len(monthly))
+    # Keep full monthly CSV, but only plot 2014 onward for readability.
+    plot_monthly = monthly[monthly["year"] >= 2014].reset_index(drop=True)
+    if plot_monthly.empty:
+        raise ValueError("No timeline rows available for year >= 2014.")
+
+    x = range(len(plot_monthly))
     fig, ax1 = plt.subplots(figsize=(13, 5))
 
-    bars = ax1.bar(x, monthly["post_volume"], color="#4C78A8", alpha=0.85, label="Post volume")
+    bars = ax1.bar(x, plot_monthly["post_volume"], color="#4C78A8", alpha=0.85, label="Post volume")
     ax1.set_ylabel("Post volume", color="#1f3d5a")
     ax1.tick_params(axis="y", labelcolor="#1f3d5a")
 
     ax2 = ax1.twinx()
     line = ax2.plot(
         x,
-        monthly["avg_sentiment_score"],
+        plot_monthly["avg_sentiment_score"],
         color="#E45756",
         linewidth=2.2,
         marker="o",
@@ -89,9 +96,12 @@ def main():
     ax2.tick_params(axis="y", labelcolor="#8b1e1e")
     ax2.set_ylim(0, 1)
 
-    ax1.set_xticks(list(x))
-    ax1.set_xticklabels(monthly["month"], rotation=45, ha="right", fontsize=8)
-    ax1.set_xlabel("Month")
+    # Reduce x-axis crowding by only showing one tick per year.
+    year_tick_idx = plot_monthly.groupby("year", sort=True).head(1).index.tolist()
+    year_tick_labels = plot_monthly.loc[year_tick_idx, "year"].astype(str).tolist()
+    ax1.set_xticks(year_tick_idx)
+    ax1.set_xticklabels(year_tick_labels, rotation=0, ha="center", fontsize=9)
+    ax1.set_xlabel("Year")
     ax1.set_title("Monthly Post Volume and Average Sentiment Score")
 
     handles1, labels1 = ax1.get_legend_handles_labels()

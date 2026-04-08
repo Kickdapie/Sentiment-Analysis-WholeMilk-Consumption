@@ -1,0 +1,41 @@
+========================================================================
+SENTIMENT MODEL COMPARISON REPORT
+Models: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest) vs VADER
+========================================================================
+
+Total documents: 1011
+Agreement: 541/1011 (53.5%)
+
+BERT distribution:
+  positive  203 (20.1%)
+  neutral   401 (39.7%)
+  negative  407 (40.3%)
+
+VADER distribution:
+  positive  503 (49.8%)
+  neutral   218 (21.6%)
+  negative  290 (28.7%)
+
+Confusion matrix (rows=BERT, cols=VADER):
+vader_label  negative  neutral  positive
+bert_label                              
+negative          226       46       135
+neutral            50      149       202
+positive           14       23       166
+
+Sample disagreements (first 15):
+- #1: BERT=neutral, VADER=negative, compound=-0.226 | I work for the DOE and the skeptic in me says this has more to do with contracting headache that would happen if we were to suddenly change the milks
+- #4: BERT=neutral, VADER=positive, compound=0.361 | I have always preferred whole milk and agree that it should be served in schools.
+- #5: BERT=neutral, VADER=negative, compound=-0.382 | If they do whole, they have to redesign the whole menu to reach nutritional goals. Less than whole milk allows more nutrients to come from food. Adding whole Milk reduces the ma...
+- #6: BERT=negative, VADER=positive, compound=0.320 | They serve 1% and skim. God forbid they have 2% and live a little. lol.
+- #7: BERT=positive, VADER=negative, compound=-0.688 | &gt; On Wednesday, President Donald Trump signed legislation that reverses an Obama-era ban on whole milk at schools funded through the federal lunch program. This ban didn’t ma...
+- #9: BERT=negative, VADER=positive, compound=0.586 | This Trump does A, so we should do B attitude is ridiculous. 1%/skim milk tastes like ass, and many kids won't drink it at all b/c of it. Whole milk tastes great and should be i...
+- #10: BERT=positive, VADER=negative, compound=-0.103 | Pizza and Chocolate milk school lunch set us up for our healthy later years.. The reduced fat of the milk balanced out the fake ingredients of the pizza
+- #11: BERT=positive, VADER=neutral, compound=0.000 | That pizza...is the reason I buy Totino's Pizzas to this day. Nostalgia.
+- #13: BERT=negative, VADER=neutral, compound=0.000 | That was a rough combo to have before P.E., especially if it was a day when you had to run the mile.
+- #14: BERT=positive, VADER=neutral, compound=0.000 | Pizza, corn niblets, and chocolate milk!!
+- #17: BERT=neutral, VADER=positive, compound=0.214 | Yes. I wasn't fat in school, but I ended up needing a gastric bypass later in life.
+- #18: BERT=positive, VADER=neutral, compound=0.000 | They was our Friday’s school lunch. Never forgot my money then!
+- #21: BERT=negative, VADER=positive, compound=0.361 | I like how the entire ecomony is basically all subsidies and borderline planned, yet these same people get their panties in a giant knot at the mere suggestion of universal heal...
+- #26: BERT=neutral, VADER=positive, compound=0.796 | I thought we were supposed to let the free market decide which businesses win?
+- #27: BERT=negative, VADER=positive, compound=0.459 | surprised that it wasnt RAW milk, because that pic has alot of RFK energy

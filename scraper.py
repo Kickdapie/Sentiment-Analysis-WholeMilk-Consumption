@@ -1,6 +1,7 @@
 """
-Scraper for "Whole milk consumption school policy" content.
-Gathers text from News RSS, Reddit, Bluesky, and optional Twitter for sentiment analysis.
+Scraper for whole milk school policy content.
+Gathers text from Reddit by default; News RSS, Bluesky, and optional Twitter are available but
+often disabled in Phase 1 (Reddit-only) to limit platform bias.
 Methodology inspired by PeerJ CS 1149 (vegan tweets).
 """
 
@@ -26,6 +27,96 @@ def clean_text(text):
     text = re.sub(r"http\S+", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:2000]  # cap length for consistency
+
+
+def reddit_post_policy_relevant(text, title="", subreddit=""):
+    """
+    Keep posts about school meals / milk in schools tied to policy, programs, or meal context.
+    Blocks obvious off-topic hits (e.g. random school stories) that only mention milk in passing.
+    """
+    t = text.lower()
+    title_l = (title or "").lower()
+    sub_l = (subreddit or "").lower()
+    excluded_subs = {s.lower() for s in getattr(config, "REDDIT_EXCLUDED_SUBREDDITS", [])}
+    if sub_l in excluded_subs:
+        return False
+    policy_terms = (
+        "trump",
+        "biden",
+        "usda",
+        "congress",
+        "senate",
+        "house of representatives",
+        "federal",
+        "white house",
+        "bill",
+        "signed",
+        "signs",
+        "law",
+        "policy",
+        "rule",
+        "ban",
+        "healthy kids",
+        "national school lunch",
+        "nslp",
+        "nutrition standard",
+        "school meal",
+        "government",
+        "administration",
+        "regulation",
+        "guideline",
+        "program",
+        "dietary guidelines",
+        "healthy kids act",
+        "public law",
+        "hr.",
+        "h.r.",
+        "s.",
+    )
+    federal_or_program = any(
+        p in t
+        for p in policy_terms
+    )
+    school_meal_context = any(
+        p in t
+        for p in (
+            "school lunch",
+            "school breakfast",
+            "cafeteria",
+            "school meal",
+            "lunch program",
+            "school nutrition",
+            "lunchroom",
+        )
+    )
+    milk_policy_terms = (
+        "whole milk",
+        "2% milk",
+        "skim milk",
+        "flavored milk",
+        "chocolate milk",
+        "school milk",
+        "milk carton",
+        "milk options",
+        "milk standards",
+        "milk rule",
+        "milk policy",
+    )
+    milk_focus = any(m in t for m in milk_policy_terms)
+    # Generic "milk" alone is noisy; keep only if tied to school meal context + policy signal.
+    generic_milk_with_context = (
+        "milk" in t and
+        any(s in t for s in ("school lunch", "school meal", "cafeteria", "nslp", "school breakfast")) and
+        federal_or_program
+    )
+    policy_in_title = any(p in title_l for p in policy_terms)
+    milk_in_title = any(m in title_l for m in milk_policy_terms)
+    # Balanced relevance: require explicit milk-in-school context, then encourage policy/program framing.
+    # This keeps whole-milk school discussions while dropping generic lunch-only chatter.
+    has_school_context = any(s in t for s in ("school", "cafeteria", "lunch", "nslp", "school meal", "school breakfast"))
+    return (milk_focus or milk_in_title or generic_milk_with_context) and has_school_context and (
+        policy_in_title or federal_or_program or school_meal_context
+    )
 
 
 def scrape_news_rss(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
@@ -70,9 +161,59 @@ def scrape_reddit(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
     rows = []
     base = "https://www.reddit.com/search.json"
     headers = {"User-Agent": "SentimentAnalysisBot/1.0 (SchoolMilkPolicy)"}
+    max_retries = int(getattr(config, "SCRAPE_REDDIT_MAX_RETRIES", 6))
+    backoff_base = float(getattr(config, "SCRAPE_REDDIT_BACKOFF_BASE", 2.0))
+    include_comments = bool(getattr(config, "REDDIT_INCLUDE_COMMENTS", False))
+    max_comments_per_post = int(getattr(config, "REDDIT_MAX_COMMENTS_PER_POST", 20))
+    min_comment_chars = int(getattr(config, "REDDIT_COMMENT_MIN_CHARS", 20))
+
+    def fetch_comments_for_post(permalink: str, query: str, parent_url: str, subreddit: str):
+        """Fetch top-level comments for a Reddit post; return row dicts."""
+        comment_rows = []
+        if not permalink:
+            return comment_rows
+        comments_url = f"https://www.reddit.com{permalink}.json"
+        try:
+            r_com = requests.get(comments_url, headers=headers, timeout=10, params={"limit": max_comments_per_post, "depth": 1})
+            r_com.raise_for_status()
+            payload = r_com.json()
+            if not isinstance(payload, list) or len(payload) < 2:
+                return comment_rows
+            comments_listing = payload[1].get("data", {}).get("children", [])
+            taken = 0
+            for child in comments_listing:
+                if taken >= max_comments_per_post:
+                    break
+                if child.get("kind") != "t1":
+                    continue
+                c = child.get("data", {})
+                body = clean_text(c.get("body", ""))
+                if len(body) < min_comment_chars:
+                    continue
+                comment_rows.append(
+                    {
+                        "source": "reddit_comment",
+                        "query": query,
+                        "text": body,
+                        "title": "",
+                        "subreddit": subreddit,
+                        "url": f"https://reddit.com{permalink}",
+                        "published": datetime.utcfromtimestamp(c.get("created_utc", 0)).isoformat(),
+                        "content_type": "comment",
+                        "parent_post_url": parent_url,
+                        "reddit_post_id": c.get("link_id", ""),
+                        "reddit_comment_id": c.get("id", ""),
+                    }
+                )
+                taken += 1
+        except Exception:
+            return comment_rows
+        return comment_rows
+
     for q in tqdm(queries, desc="Reddit"):
         collected = 0
         after = None
+        retries = 0
         while collected < max_per_query:
             try:
                 params = {"q": q, "limit": 100, "type": "link"}
@@ -80,6 +221,7 @@ def scrape_reddit(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
                     params["after"] = after
                 r = requests.get(base, params=params, headers=headers, timeout=10)
                 r.raise_for_status()
+                retries = 0
                 data = r.json()
                 children = data.get("data", {}).get("children", [])
                 if not children:
@@ -93,23 +235,46 @@ def scrape_reddit(queries=None, max_per_query=config.MAX_ITEMS_PER_QUERY):
                     text = f"{title}. {selftext}".strip().rstrip(".")
                     if len(text) < 15:
                         continue
+                    subreddit = str(post.get("subreddit", "") or "")
+                    if getattr(config, "FILTER_REDDIT_POLICY_RELEVANCE", False) and not reddit_post_policy_relevant(
+                        text=text, title=title, subreddit=subreddit
+                    ):
+                        continue
+                    permalink = post.get("permalink", "") or ""
+                    post_url = f"https://reddit.com{permalink}" if permalink else ""
                     rows.append({
                         "source": "reddit",
                         "query": q,
                         "text": text,
                         "title": title,
-                        "url": f"https://reddit.com{post.get('permalink', '')}",
+                        "subreddit": subreddit,
+                        "url": post_url,
                         "published": datetime.utcfromtimestamp(post.get("created_utc", 0)).isoformat(),
+                        "content_type": "post",
+                        "parent_post_url": "",
+                        "reddit_post_id": post.get("name", ""),
+                        "reddit_comment_id": "",
                     })
+                    if include_comments:
+                        rows.extend(fetch_comments_for_post(permalink=permalink, query=q, parent_url=post_url, subreddit=subreddit))
                     collected += 1
                 after = data.get("data", {}).get("after")
                 if not after:
                     break
                 time.sleep(1)
             except Exception as e:
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                if status_code == 429 and retries < max_retries:
+                    wait_s = backoff_base * (2 ** retries)
+                    tqdm.write(
+                        f"Reddit rate-limited for '{q}' (retry {retries + 1}/{max_retries}); sleeping {wait_s:.1f}s..."
+                    )
+                    retries += 1
+                    time.sleep(wait_s)
+                    continue
                 tqdm.write(f"Reddit error for '{q}': {e}")
                 break
-        time.sleep(0.5)
+        time.sleep(getattr(config, "SCRAPE_REDDIT_QUERY_DELAY", 0.5))
     return rows
 
 
@@ -395,12 +560,14 @@ def run_scraper(sources=None):
     if "twitter" in sources:
         sources = [s for s in sources if s != "twitter"] + ["twitter"]
     all_rows = []
-    if "news_rss" in sources:
-        all_rows.extend(scrape_news_rss())
+    # Phase 1: Reddit-only — uncomment to include Google News RSS
+    # if "news_rss" in sources:
+    #     all_rows.extend(scrape_news_rss())
     if "reddit" in sources:
         all_rows.extend(scrape_reddit())
-    if "bluesky" in sources:
-        all_rows.extend(scrape_bluesky())
+    # Phase 1: skip Bluesky — uncomment when re-enabling multi-platform collection
+    # if "bluesky" in sources:
+    #     all_rows.extend(scrape_bluesky())
     if "twitter" in sources:
         all_rows.extend(scrape_twitter_snscrape(max_per_query=30))
     if not all_rows:
@@ -409,10 +576,29 @@ def run_scraper(sources=None):
             "Schools should offer whole milk again. Kids need the nutrition. "
             "Banning whole milk in school lunches was a mistake."
         )
-        all_rows = [{"source": "sample", "query": "whole milk school", "text": sample, "title": "", "url": "", "published": ""}]
+        all_rows = [{
+            "source": "sample",
+            "query": "whole milk school",
+            "text": sample,
+            "title": "",
+            "url": "",
+            "published": "",
+            "content_type": "post",
+            "parent_post_url": "",
+            "reddit_post_id": "",
+            "reddit_comment_id": "",
+        }]
         tqdm.write("No scraped results; using small sample so pipeline can run.")
     df = pd.DataFrame(all_rows)
-    df = df.drop_duplicates(subset=["text"], keep="first")
+    if "reddit_comment_id" in df.columns and "reddit_post_id" in df.columns:
+        has_comment_id = df["reddit_comment_id"].fillna("").astype(str).str.len() > 0
+        has_post_id = df["reddit_post_id"].fillna("").astype(str).str.len() > 0
+        df_comments = df[has_comment_id].drop_duplicates(subset=["reddit_comment_id"], keep="first")
+        df_posts = df[~has_comment_id & has_post_id].drop_duplicates(subset=["reddit_post_id"], keep="first")
+        df_other = df[~has_comment_id & ~has_post_id].drop_duplicates(subset=["text"], keep="first")
+        df = pd.concat([df_posts, df_comments, df_other], ignore_index=True)
+    else:
+        df = df.drop_duplicates(subset=["text"], keep="first")
     os.makedirs(os.path.dirname(config.SCRAPED_RAW_PATH), exist_ok=True)
     df.to_csv(config.SCRAPED_RAW_PATH, index=False, encoding="utf-8")
     tqdm.write(f"Saved {len(df)} items to {config.SCRAPED_RAW_PATH}")
@@ -420,4 +606,4 @@ def run_scraper(sources=None):
 
 
 if __name__ == "__main__":
-    run_scraper(sources=getattr(config, "SCRAPE_SOURCES", ["news_rss", "reddit"]))
+    run_scraper(sources=getattr(config, "SCRAPE_SOURCES", ["reddit"]))

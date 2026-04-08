@@ -1,0 +1,13 @@
+Total rows: 1011
+Posts: 175
+Comments: 836
+
+Post sentiment split (n=175):
+  positive: 32 (18.3%)
+  neutral: 116 (66.3%)
+  negative: 27 (15.4%)
+
+Comment sentiment split (n=836):
+  positive: 171 (20.5%)
+  neutral: 285 (34.1%)
+  negative: 380 (45.5%)

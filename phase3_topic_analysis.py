@@ -406,6 +406,7 @@ def main():
         "milk", "whole", "school", "schools", "lunch", "children", "kids",
         "dairy", "nutrition", "healthy", "fat", "policy", "usda", "cafeteria",
         "chocolate", "parents", "student", "students", "food", "health",
+        "trump", "federal", "bill", "law", "senate", "congress", "act",
     }
     allowed_terms = core_terms if allowed_terms is None else (allowed_terms | core_terms)
     drivers_df = log_odds_drivers(df_domain, top_n=10, prior=0.01, allowed_terms=allowed_terms)
