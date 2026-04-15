@@ -4,18 +4,19 @@ Topic: Whole Milk Consumption School Policy
 Model: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest)
 ============================================================
 
-Total documents analyzed: 1
+Total documents analyzed: 1011
 
 Overall sentiment distribution:
-  Positive: 0 (0.0%)
-  Negative: 0 (0.0%)
-  Neutral:  1 (100.0%)
+  Positive: 203 (20.1%)
+  Negative: 407 (40.3%)
+  Neutral:  401 (39.7%)
 
-Mean sentiment score (0=neg, 1=pos): 0.091
+Mean sentiment score (0=neg, 1=pos): 0.218
 
 Sentiment by source:
-  sample: 1 items — Positive 0 (0.0%), Negative 0 (0.0%), Neutral 1 (100.0%)
+  Reddit Post: 175 items — Positive 32 (18.3%), Negative 27 (15.4%), Neutral 116 (66.3%)
+  Reddit Comment: 836 items — Positive 171 (20.5%), Negative 380 (45.5%), Neutral 285 (34.1%)
 
-Conclusion: Overall sentiment is mixed or neutral across the collected content.
+Conclusion: Overall sentiment toward whole milk school policy in the collected content is predominantly negative.
 
 Outputs: sentiment_summary.png, sentiment_by_source.png, keyword_network.png, keywords.csv.

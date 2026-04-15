@@ -1,10 +1,13 @@
 ========================================================================
 SENTIMENT MODEL COMPARISON REPORT
-Models: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest) vs VADER
+Models: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest), VADER, TF-IDF+LogReg
 ========================================================================
 
 Total documents: 1011
-Agreement: 541/1011 (53.5%)
+Pairwise agreement:
+  BERT vs VADER: 541/1011 (53.5%)
+  BERT vs TF-IDF: 381/1011 (37.7%)
+  VADER vs TF-IDF: 536/1011 (53.0%)
 
 BERT distribution:
   positive  203 (20.1%)
@@ -16,6 +19,11 @@ VADER distribution:
   neutral   218 (21.6%)
   negative  290 (28.7%)
 
+TF-IDF distribution:
+  positive  550 (54.4%)
+  neutral   232 (22.9%)
+  negative  229 (22.7%)
+
 Confusion matrix (rows=BERT, cols=VADER):
 vader_label  negative  neutral  positive
 bert_label                              
@@ -23,19 +31,26 @@ negative          226       46       135
 neutral            50      149       202
 positive           14       23       166
 
+Confusion matrix (rows=BERT, cols=TF-IDF):
+tfidf_label  negative  neutral  positive
+bert_label                              
+negative          139       94       174
+neutral            65      101       235
+positive           25       37       141
+
 Sample disagreements (first 15):
-- #1: BERT=neutral, VADER=negative, compound=-0.226 | I work for the DOE and the skeptic in me says this has more to do with contracting headache that would happen if we were to suddenly change the milks
-- #4: BERT=neutral, VADER=positive, compound=0.361 | I have always preferred whole milk and agree that it should be served in schools.
-- #5: BERT=neutral, VADER=negative, compound=-0.382 | If they do whole, they have to redesign the whole menu to reach nutritional goals. Less than whole milk allows more nutrients to come from food. Adding whole Milk reduces the ma...
-- #6: BERT=negative, VADER=positive, compound=0.320 | They serve 1% and skim. God forbid they have 2% and live a little. lol.
-- #7: BERT=positive, VADER=negative, compound=-0.688 | &gt; On Wednesday, President Donald Trump signed legislation that reverses an Obama-era ban on whole milk at schools funded through the federal lunch program. This ban didn’t ma...
-- #9: BERT=negative, VADER=positive, compound=0.586 | This Trump does A, so we should do B attitude is ridiculous. 1%/skim milk tastes like ass, and many kids won't drink it at all b/c of it. Whole milk tastes great and should be i...
-- #10: BERT=positive, VADER=negative, compound=-0.103 | Pizza and Chocolate milk school lunch set us up for our healthy later years.. The reduced fat of the milk balanced out the fake ingredients of the pizza
-- #11: BERT=positive, VADER=neutral, compound=0.000 | That pizza...is the reason I buy Totino's Pizzas to this day. Nostalgia.
-- #13: BERT=negative, VADER=neutral, compound=0.000 | That was a rough combo to have before P.E., especially if it was a day when you had to run the mile.
-- #14: BERT=positive, VADER=neutral, compound=0.000 | Pizza, corn niblets, and chocolate milk!!
-- #17: BERT=neutral, VADER=positive, compound=0.214 | Yes. I wasn't fat in school, but I ended up needing a gastric bypass later in life.
-- #18: BERT=positive, VADER=neutral, compound=0.000 | They was our Friday’s school lunch. Never forgot my money then!
-- #21: BERT=negative, VADER=positive, compound=0.361 | I like how the entire ecomony is basically all subsidies and borderline planned, yet these same people get their panties in a giant knot at the mere suggestion of universal heal...
-- #26: BERT=neutral, VADER=positive, compound=0.796 | I thought we were supposed to let the free market decide which businesses win?
-- #27: BERT=negative, VADER=positive, compound=0.459 | surprised that it wasnt RAW milk, because that pic has alot of RFK energy
+- #0: BERT=neutral, VADER=neutral, TF-IDF=positive, compound=0.000, tfidf_p_pos=0.761 | As Trump pushes whole milk, NYC schools say they're sticking with 1%
+- #1: BERT=neutral, VADER=negative, TF-IDF=positive, compound=-0.226, tfidf_p_pos=0.922 | I work for the DOE and the skeptic in me says this has more to do with contracting headache that would happen if we were to suddenly change the milks
+- #2: BERT=neutral, VADER=neutral, TF-IDF=positive, compound=0.000, tfidf_p_pos=0.894 | "On Wednesday, President Donald Trump signed a bill that **allows** schools participating in the National School Lunch Program to serve whole and 2% milk alongside fat-free and ...
+- #4: BERT=neutral, VADER=positive, TF-IDF=positive, compound=0.361, tfidf_p_pos=0.813 | I have always preferred whole milk and agree that it should be served in schools.
+- #5: BERT=neutral, VADER=negative, TF-IDF=positive, compound=-0.382, tfidf_p_pos=0.899 | If they do whole, they have to redesign the whole menu to reach nutritional goals. Less than whole milk allows more nutrients to come from food. Adding whole Milk reduces the ma...
+- #6: BERT=negative, VADER=positive, TF-IDF=positive, compound=0.320, tfidf_p_pos=0.924 | They serve 1% and skim. God forbid they have 2% and live a little. lol.
+- #7: BERT=positive, VADER=negative, TF-IDF=positive, compound=-0.688, tfidf_p_pos=0.915 | &gt; On Wednesday, President Donald Trump signed legislation that reverses an Obama-era ban on whole milk at schools funded through the federal lunch program. This ban didn’t ma...
+- #8: BERT=neutral, VADER=neutral, TF-IDF=positive, compound=0.000, tfidf_p_pos=0.750 | everyone should be drinking whole milk, if you drink milk at all
+- #9: BERT=negative, VADER=positive, TF-IDF=positive, compound=0.586, tfidf_p_pos=0.867 | This Trump does A, so we should do B attitude is ridiculous. 1%/skim milk tastes like ass, and many kids won't drink it at all b/c of it. Whole milk tastes great and should be i...
+- #10: BERT=positive, VADER=negative, TF-IDF=negative, compound=-0.103, tfidf_p_pos=0.170 | Pizza and Chocolate milk school lunch set us up for our healthy later years.. The reduced fat of the milk balanced out the fake ingredients of the pizza
+- #11: BERT=positive, VADER=neutral, TF-IDF=positive, compound=0.000, tfidf_p_pos=0.631 | That pizza...is the reason I buy Totino's Pizzas to this day. Nostalgia.
+- #13: BERT=negative, VADER=neutral, TF-IDF=negative, compound=0.000, tfidf_p_pos=0.397 | That was a rough combo to have before P.E., especially if it was a day when you had to run the mile.
+- #14: BERT=positive, VADER=neutral, TF-IDF=neutral, compound=0.000, tfidf_p_pos=0.454 | Pizza, corn niblets, and chocolate milk!!
+- #15: BERT=neutral, VADER=neutral, TF-IDF=negative, compound=0.000, tfidf_p_pos=0.056 | At least the chocolate milk was reduced fat?
+- #17: BERT=neutral, VADER=positive, TF-IDF=neutral, compound=0.214, tfidf_p_pos=0.500 | Yes. I wasn't fat in school, but I ended up needing a gastric bypass later in life.

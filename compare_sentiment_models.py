@@ -1,5 +1,5 @@
 """
-Compare current BERT sentiment predictions with a second model (VADER).
+Compare current BERT sentiment predictions with additional baseline models.
 
 Inputs:
   - data/scraped_clean.csv (preferred; should contain BERT outputs)
@@ -63,7 +63,20 @@ def add_vader_predictions(df: pd.DataFrame) -> pd.DataFrame:
     out["bert_score"] = out.get("sentiment_score", pd.Series([None] * len(out)))
     out["vader_compound"] = compounds
     out["vader_label"] = compounds.apply(vader_label_from_compound)
-    out["model_agree"] = out["bert_label"] == out["vader_label"]
+    return out
+
+
+def add_tfidf_predictions(df: pd.DataFrame) -> pd.DataFrame:
+    """Add TF-IDF + logistic predictions using saved model artifacts."""
+    from predict_sentiment import load_model, predict_texts
+
+    vectorizer, model = load_model()
+    texts = df["text"].fillna("").astype(str).tolist()
+    labels, scores = predict_texts(texts, vectorizer, model)
+
+    out = df.copy()
+    out["tfidf_label"] = pd.Series(labels).fillna("neutral").astype(str).str.lower().str.strip()
+    out["tfidf_score"] = scores
     return out
 
 
@@ -76,22 +89,34 @@ def counts_as_pct(series: pd.Series) -> pd.DataFrame:
 
 def write_report(df_cmp: pd.DataFrame) -> None:
     total = len(df_cmp)
-    agree = int(df_cmp["model_agree"].sum())
-    agree_pct = (100.0 * agree / total) if total else 0.0
+    agree_bv = int((df_cmp["bert_label"] == df_cmp["vader_label"]).sum())
+    agree_bt = int((df_cmp["bert_label"] == df_cmp["tfidf_label"]).sum())
+    agree_vt = int((df_cmp["vader_label"] == df_cmp["tfidf_label"]).sum())
+    agree_bv_pct = (100.0 * agree_bv / total) if total else 0.0
+    agree_bt_pct = (100.0 * agree_bt / total) if total else 0.0
+    agree_vt_pct = (100.0 * agree_vt / total) if total else 0.0
 
     bert_dist = counts_as_pct(df_cmp["bert_label"])
     vader_dist = counts_as_pct(df_cmp["vader_label"])
-    confusion = pd.crosstab(df_cmp["bert_label"], df_cmp["vader_label"], dropna=False)
+    tfidf_dist = counts_as_pct(df_cmp["tfidf_label"])
+    confusion_bv = pd.crosstab(df_cmp["bert_label"], df_cmp["vader_label"], dropna=False)
+    confusion_bt = pd.crosstab(df_cmp["bert_label"], df_cmp["tfidf_label"], dropna=False)
 
-    disagreements = df_cmp.loc[~df_cmp["model_agree"], ["text", "bert_label", "vader_label", "vader_compound"]].head(15)
+    disagreements = df_cmp.loc[
+        (df_cmp["bert_label"] != df_cmp["vader_label"]) | (df_cmp["bert_label"] != df_cmp["tfidf_label"]),
+        ["text", "bert_label", "vader_label", "tfidf_label", "vader_compound", "tfidf_score"],
+    ].head(15)
 
     with open(OUT_REPORT_PATH, "w", encoding="utf-8") as f:
         f.write("=" * 72 + "\n")
         f.write("SENTIMENT MODEL COMPARISON REPORT\n")
-        f.write("Models: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest) vs VADER\n")
+        f.write("Models: BERT (cardiffnlp/twitter-roberta-base-sentiment-latest), VADER, TF-IDF+LogReg\n")
         f.write("=" * 72 + "\n\n")
         f.write(f"Total documents: {total}\n")
-        f.write(f"Agreement: {agree}/{total} ({agree_pct:.1f}%)\n\n")
+        f.write("Pairwise agreement:\n")
+        f.write(f"  BERT vs VADER: {agree_bv}/{total} ({agree_bv_pct:.1f}%)\n")
+        f.write(f"  BERT vs TF-IDF: {agree_bt}/{total} ({agree_bt_pct:.1f}%)\n")
+        f.write(f"  VADER vs TF-IDF: {agree_vt}/{total} ({agree_vt_pct:.1f}%)\n\n")
 
         f.write("BERT distribution:\n")
         for label in ["positive", "neutral", "negative"]:
@@ -105,8 +130,17 @@ def write_report(df_cmp: pd.DataFrame) -> None:
             f.write(f"  {label:8s} {int(row['count']):4d} ({row['pct']:.1f}%)\n")
         f.write("\n")
 
+        f.write("TF-IDF distribution:\n")
+        for label in ["positive", "neutral", "negative"]:
+            row = tfidf_dist.loc[label]
+            f.write(f"  {label:8s} {int(row['count']):4d} ({row['pct']:.1f}%)\n")
+        f.write("\n")
+
         f.write("Confusion matrix (rows=BERT, cols=VADER):\n")
-        f.write(confusion.to_string())
+        f.write(confusion_bv.to_string())
+        f.write("\n\n")
+        f.write("Confusion matrix (rows=BERT, cols=TF-IDF):\n")
+        f.write(confusion_bt.to_string())
         f.write("\n\n")
 
         f.write("Sample disagreements (first 15):\n")
@@ -118,8 +152,8 @@ def write_report(df_cmp: pd.DataFrame) -> None:
                 if len(snippet) > 180:
                     snippet = snippet[:177] + "..."
                 f.write(
-                    f"- #{i}: BERT={row['bert_label']}, VADER={row['vader_label']}, "
-                    f"compound={row['vader_compound']:.3f} | {snippet}\n"
+                    f"- #{i}: BERT={row['bert_label']}, VADER={row['vader_label']}, TF-IDF={row['tfidf_label']}, "
+                    f"compound={row['vader_compound']:.3f}, tfidf_p_pos={row['tfidf_score']:.3f} | {snippet}\n"
                 )
 
     print(f"Saved: {OUT_REPORT_PATH}")
@@ -133,6 +167,7 @@ def main():
         raise ValueError("Expected `sentiment_label` column from BERT predictions.")
 
     df_cmp = add_vader_predictions(df)
+    df_cmp = add_tfidf_predictions(df_cmp)
     df_cmp.to_csv(OUT_PRED_PATH, index=False)
     print(f"Saved: {OUT_PRED_PATH}")
 
